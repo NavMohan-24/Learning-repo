@@ -34,10 +34,13 @@ qc.box(body_0, [0, 1, 2, 3], [])
 ```python
 from qiskit.circuit import QuantumCircuit
 
-qc = QuantumCircuit(9)
+qc = QuantumCircuit(4)
 with qc.box():
+    qc.h(0)
     qc.cz(0, 1)
     qc.cz(2, 3)
+
+qc.measure_all()
 ```
 
 
