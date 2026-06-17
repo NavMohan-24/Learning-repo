@@ -1,4 +1,26 @@
-### SysProcAttr
+## Setting up a container in GO code.
+
+### Setting up the environment
+
+- Spining up a docker container
+
+```bash
+docker run -it --privileged --name my-container ubuntu bash
+```
+`--privileged` grants full root access (required to perform syscalls)
+
+- Copying files from the device to container
+
+```bash
+docker cp path/to/source my-container:/path/to/destination
+```
+
+- Execution of the code
+```bash
+go run main.go run \bin\bash
+```
+
+### Spawing a Child process in Go
 
 - A new child process in Go can be spawned with a following commands:
 
