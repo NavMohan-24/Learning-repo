@@ -133,16 +133,28 @@ func child(){
     - Container runtimes use more sophisticated _Layered Filesystem_. Its lowest layer is immutable and shared across all containers (For eg: linux base image will be in the lowest layer). The highest layer, would be specific to the container. 
 
 
+
+
 ### Mounting the `/proc`
 
-<!-- - A container created only by cloning UTS and PID name spaces, will still shows process in the host while inspecting with `ps`.
+#### Mounting a Directory
 
-    - If a docker container is the host and child container is inside it, then `ps` inside the child container would crash. -->
+- Mounting is the process of making a storage device or partition of making storage device or partition accessible to the OS. Mounting is the process of attaching a filesystem — whether a physical storage device, network share, or virtual filesystem — to a directory (mount point), making its contents accessible at that path. This integration allows users and applications to read, write, and manage data on the mounted file system as if it were part of the local directory structure.
 
-- Ideally containers should be isolated from the host and should only show the process within it.
+- Mounting a virtual fs would allow the kernel to serve the data a directory. For instance, assume we've created a directory `my_dir`, we can mount it as follows:
 
-<!-- - This can be done by mounting the `/proc` directory is a new mount namespace. -->
+    `mount -t sysfs  sysfs  /my_dir   # kernel serves hardware info`
 
+    `mount -t proc proc /my_dir # kernel serves process info`
+
+    `mount -t devpts devpts /my_dir   # kernel serves pseudo-terminal`
+
+- However, not all mounts serve kernel-generated data. Bind mounts simply mirror an existing path. tmpfs and overlayfs are kernel-managed but store user data rather than kernel-generated content.
+
+#### Proc directory
+- `/proc` is a virtual filesystem created dynamically by the system during runtime. It holds information of all the process that are currently running on the system. 
+
+- The `ps` command only looks at `/proc` folder to check what all process running on the device. 
 
 - At this point, running a `ps` command on host and container gives similar results as the following.
 
