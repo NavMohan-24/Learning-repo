@@ -178,8 +178,14 @@ Error: /proc must be mounted
       proc   /proc   proc    defaults
   In the meantime, run "mount proc /proc -t proc"
 ```
+<!-- - Ideally containers should be isolated from the host and should only show the process within it. -->
 
-- The `ps` command only looks at `/proc` folder to check what all process running on the device. On the host, `/proc` is properly mounted. However, since we changed the root of the child process into a new filesystem, we have to manually mount the `/proc`.
+- On the host, `ps` command returns all the process since the `/proc` is properly mounted. It includes process inside the container too.
+
+- However, inside the container, it returns an error message. Ideally, it should provide an isolated view of all the process that are inside the container. 
+
+- It happens since we haven't mounted the `/proc` directory in our new filesystem of the container (to which we `chroot`-ed). 
+
 
 - In the Go code, the `/proc` can be mounted as follows:
 
@@ -205,14 +211,40 @@ The `Mount` call accepts three arguements:
 > 2. **Target** : Set this to the path to the `proc` fs. Since, we do chroot and chdir previously, simply passing `proc` would suffice.
 > 3. **fsType** : must be exactly `proc`.
 
-- Mounting `proc` would allow us to have an isolated view of process inside the container. 
+- Mounting `proc` would allow us to have an isolated view of process inside the container. The process in the container will be still visible from host. But not the other way.
 
-- The process in the container will be still visible from host. But not the other way.
+
 
 ### Cloning the Mount Namespace
 
+#### Mount Namespace
+
+- Running `mount` command on host and container gives the result as follows:
+
+ON HOST:
+
+```bash
+root@0ff0962a3623:/#  mount | grep proc
+proc on /proc type proc (rw,nosuid,nodev,noexec,relatime)
+proc on /nav/rootfs/proc type proc (rw,relatime)
+```
+ON CONTAINER:
+
+```bash
+mount | grep proc
+proc on /proc type proc (rw,relatime)
+
+```
 
 
+
+
+| Path | Filesystem Type | Purpose |
+|------|----------------|---------|
+| `/proc` | `procfs` | Process information |
+| `/sys` | `sysfs` | Hardware and kernel information |
+| `/dev` | `devtmpfs` | Device files |
+| `/dev/pts` | `devpts` | Pseudo-terminals |
 
 
 
