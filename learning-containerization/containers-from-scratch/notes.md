@@ -48,6 +48,18 @@ cmd.Run()
     - `cmd.Start()`: Start with out waiting.
     - `cmd.Wait()`: Wait after `Start()`.
 
+### Flags in GO:
+- `CloneFlags` --> *performs `clone` syscall* : Creates a new child process from scratch.
+    - State-Copy Namesapces (Cloned from parent)
+    
+        - `CLONE_NEWNS` (**Mount**) 
+        - `CLONE_NEWUTS` (**Hostname**)
+    
+    - Reset-to-Empty Namespaces (Fresh slate)
+
+        - CLONE_NEWPID (**Process ID**)
+        - CLONE_NEWNT (**network**)
+
 - Clone flags tells what namespaces to create for the new process.
 
 ### Configuring Child Process/Container
@@ -141,7 +153,7 @@ func child(){
 
 - Mounting is the process of making a storage device or partition of making storage device or partition accessible to the OS. Mounting is the process of attaching a filesystem — whether a physical storage device, network share, or virtual filesystem — to a directory (mount point), making its contents accessible at that path. This integration allows users and applications to read, write, and manage data on the mounted file system as if it were part of the local directory structure.
 
-- Mounting a virtual fs would allow the kernel to serve the data a directory. For instance, assume we've created a directory `my_dir`, we can mount it as follows:
+- Mounting a virtual fs would allow the kernel to serve the data to a directory. For instance, assume we've created a directory `my_dir`, we can mount it as follows:
 
     `mount -t sysfs  sysfs  /my_dir   # kernel serves hardware info`
 
@@ -229,7 +241,7 @@ proc on /nav/rootfs/proc type proc (rw,relatime)
 ON CONTAINER:
 
 ```bash
-mount | grep proc
+root@container:/# mount | grep proc
 proc on /proc type proc (rw,relatime)
 ```
 - Here we see the container mount polluting the host's mount table. i.e, mount point of the containers proc is visible on the host.
