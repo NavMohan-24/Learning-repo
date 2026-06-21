@@ -152,9 +152,9 @@ func child(){
 - However, not all mounts serve kernel-generated data. Bind mounts simply mirror an existing path. tmpfs and overlayfs are kernel-managed but store user data rather than kernel-generated content.
 
 #### Proc directory
-- `/proc` is a virtual filesystem created dynamically by the system during runtime. It holds information of all the process that are currently running on the system. 
+- `/proc` is a virtual filesystem used by the system during runtime. It holds information of all the process that are currently running on the system. 
 
-- The `ps` command only looks at `/proc` folder to check what all process running on the device. 
+- The `ps` command looks at `/proc` folder to check what all process running on the device. 
 
 - At this point, running a `ps` command on host and container gives similar results as the following.
 
@@ -217,9 +217,7 @@ The `Mount` call accepts three arguements:
 
 ### Cloning the Mount Namespace
 
-#### Mount Namespace
-
-- Running `mount` command on host and container gives the result as follows:
+- Running `mount` command on the host and container gives the result as follows:
 
 ON HOST:
 
@@ -233,8 +231,38 @@ ON CONTAINER:
 ```bash
 mount | grep proc
 proc on /proc type proc (rw,relatime)
-
 ```
+- Here we see the container mount polluting the host's mount table. i.e, mount point of the containers proc is visible on the host.
+
+    > A mount table is an internal list maintained by the Linux kernel that keeps track of every active filesystem on the system. It maps a filesystem source (like a hard drive partition, a network share, or a virtual driver like procfs) to its corresponding destination directory (the mount point).
+
+- It occurs since the container we have created shares the same `mount` namespace. This poses a security threat as the mount points of host could be modified from the container.
+
+- Ideally, we wish the container to have isolated mount points from the host. This could be done by setting a new mount namespace for a container. 
+
+- The container would maintain a seperate mount table when the mount namespace is set.
+
+- In the GO code a new mount namespace could be created as follows:
+
+``` go
+func run(){
+    cmd := exec.Command("/proc/self/exe", append([]string{"child"},os.Args[2:]...)...)
+    .
+    .
+
+    cmd.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
+		// Unshareflags: syscall.CLONE_NEWNS, 
+	}
+
+    cmd.Run()
+    }
+```
+
+
+- When a new mount namespace is created with `CLONE_NEWNS`, the kernel copies the host's mount table into the container's mount namespace as a starting point — including the host's `/proc`. However, after `chroot` shifts the root to `/nav/rootfs`, the `child()` function remounts `/proc` fresh inside the new root. This new `/proc` is scoped to the container's PID namespace, so it only reflects the container's processes — overriding the copied one.
+
+
 
 
 
