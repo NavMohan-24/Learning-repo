@@ -1,16 +1,29 @@
 ## Setting up a container in GO code.
 
-### Setting up the environment
+### Pre-requisites:
 
-- Spining up a docker container
+- Spinning up a docker container.
 
 ```bash
-docker run -it --privileged --name my-container ubuntu bash
+docker run -it --privileged --cgroupns=host --name my-container ubuntu bash
 ```
-`--privileged` grants full root access (required to perform syscalls)
+`--privileged` grants full root access (required to perform syscalls).
+
+`--cgroupns=host` gives the container access to the host's cgroup hierarchy.
+
+- Install golang
+```bash
+apt update && apt install golang-go
+```
+- Install debootstrap
+
+```bash
+apt install -y debootstrap
+```
+
+### Execution of Go code
 
 - Copying files from the device to container
-
 ```bash
 docker cp path/to/source my-container:/path/to/destination
 ```
