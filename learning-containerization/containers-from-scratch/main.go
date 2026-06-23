@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"syscall"
 )
 
@@ -32,23 +34,28 @@ func run(){
 	
 	// SysProcsAttr - struct that allow modification of OS-level process attributes
 	// Clone Flags - tells the kernel what namespaces to create for new process
-	// cmd.SysProcAttr = &syscall.SysProcAttr{
-	// 	Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
-	// 	Unshareflags: syscall.CLONE_NEWNS, // prevent sharing of container mount namespace to host
-	// }
-
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID,
+		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
+		// Unshareflags: syscall.CLONE_NEWNS, // prevent sharing of container mount namespace to host
 	}
 
+	// cmd.SysProcAttr = &syscall.SysProcAttr{
+	// 	Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID,
+	// }
 
 
 	must(cmd.Run()) 
+
+	//  remove cgroup upon exit
+	syscall.Rmdir("/sys/fs/cgroup/nav")
+
 
 }
 
 func  child(){
 	fmt.Printf("Running %v as %d\n", os.Args[2:], os.Getpid())
+
+	cg()
 
 	syscall.Sethostname([]byte("container"))
 	syscall.Chroot("/nav/rootfs")
@@ -62,8 +69,22 @@ func  child(){
 
 
 	must(cmd.Run()) 
-
+	
+	// umount proc upon exit
 	syscall.Unmount("/proc", 0)
+}
+
+func cg(){
+
+	cgroups := filepath.Join("/sys/fs/cgroup/", "nav")
+	
+	err := os.Mkdir(cgroups, 0755)
+	if err != nil && !os.IsExist(err){
+		panic(err)
+	}
+
+	must(os.WriteFile(filepath.Join(cgroups, "pids.max"), []byte("20"), 0700))
+	must(os.WriteFile(filepath.Join(cgroups, "cgroup.procs"), []byte(strconv.Itoa(os.Getpid())), 0700))
 }
 
 
