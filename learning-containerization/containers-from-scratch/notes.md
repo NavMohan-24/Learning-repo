@@ -28,10 +28,12 @@ apt install -y debootstrap
 docker cp path/to/source my-container:/path/to/destination
 ```
 
-- Execution of the code
+- Execution of the code inside the host container
 ```bash
 go run main.go run \bin\bash
 ```
+
+## Namespaces
 
 ### Spawing a Child process in Go
 
@@ -115,6 +117,19 @@ func child(){
 }
 
 ```
+---
+**HOW `/proc/self/exe` WORKS (Not Completely Understood)?**
+
+- `/proc/self/exe` represents the compiled binary of the go file. 
+
+- Adding `/proc/self/exe` and `append([]string{"child"}` in the function arguments of Command cause the rexecution of binary with `child` as first argunment.
+
+    - In other words, it will trigger `go run main.go child /bin/bash`.
+
+- During the execution, the Parent will start execution. It will set up the `cmd` struct, but will be blocked at `cmd.Run()` till the `child` finish its execution.
+
+---
+
 ### Setting up a new file system
 
 - It requires a new file system which will be mounted as root of the child process.
@@ -134,7 +149,16 @@ func child(){
     ```
     The alphine rootfs use `sh` instead of `bash`.
 
+    | Path | Filesystem Type | Purpose |
+    |------|----------------|---------|
+    | `/proc` | `procfs` | Process information |
+    | `/sys` | `sysfs` | Hardware and kernel information |
+    | `/dev` | `devtmpfs` | Device files |
+    | `/dev/pts` | `devpts` | Pseudo-terminals |
+
 - Once the new root filesystem is created, the root directory and working directory of child process needs to be changed.
+
+
 
 ```go
 func child(){
@@ -164,7 +188,7 @@ func child(){
 
 #### Mounting a Directory
 
-- Mounting is the process of making a storage device or partition of making storage device or partition accessible to the OS. Mounting is the process of attaching a filesystem — whether a physical storage device, network share, or virtual filesystem — to a directory (mount point), making its contents accessible at that path. This integration allows users and applications to read, write, and manage data on the mounted file system as if it were part of the local directory structure.
+- Mounting is the process of attaching a filesystem — whether a physical storage device, network share, or virtual filesystem — to a directory (mount point), making its contents at that path accesible to the OS. This integration allows users and applications to read, write, and manage data on the mounted file system as if it were part of the local directory structure.
 
 - Mounting a virtual fs would allow the kernel to serve the data to a directory. For instance, assume we've created a directory `my_dir`, we can mount it as follows:
 
@@ -257,7 +281,7 @@ ON CONTAINER:
 root@container:/# mount | grep proc
 proc on /proc type proc (rw,relatime)
 ```
-- Here we see the container mount polluting the host's mount table. i.e, mount point of the containers proc is visible on the host.
+- Here, we see the container mount polluting the host's mount table. i.e, mount point of the containers proc is visible on the host.
 
     > A mount table is an internal list maintained by the Linux kernel that keeps track of every active filesystem on the system. It maps a filesystem source (like a hard drive partition, a network share, or a virtual driver like procfs) to its corresponding destination directory (the mount point).
 
@@ -288,24 +312,111 @@ func run(){
 - When a new mount namespace is created with `CLONE_NEWNS`, the kernel copies the host's mount table into the container's mount namespace as a starting point — including the host's `/proc`. However, after `chroot` shifts the root to `/nav/rootfs`, the `child()` function remounts `/proc` fresh inside the new root. This new `/proc` is scoped to the container's PID namespace, so it only reflects the container's processes — overriding the copied one.
 
 
+## Control Groups (CGroups)
+
+- A psuedo file system used for resource management in containers.
+- Some of the few resources that could be limited using control groups are:
+
+    - Memory 
+    - CPU
+    - I/O
+    - Process Number etc.
+
+- In the host, cgroups will be shown in the `/sys/fs/cgroup` path.
+
+- In the GO code, the control group is defined as follows:
+
+```go
+func cg(){
+
+	cgroups := filepath.Join("/sys/fs/cgroup/", "directory-name")
+	
+	err := os.Mkdir(cgroups, 0755)
+	if err != nil && !os.IsExist(err){
+		panic(err)
+	}
+
+	must(os.WriteFile(filepath.Join(cgroups, "pids.max"), []byte("20"), 0700))
+	must(os.WriteFile(filepath.Join(cgroups, "cgroup.procs"), []byte(strconv.Itoa(os.Getpid())), 0700))
+}
+```
+
+- The above code creates a directory inside the `/sys/fs/cgroup/` and sets limits on the maximum pids. Then it would add the process id to the `cgroups.proc` list. 
+
+- Directories created inside cgroup directory follows the same file structure of the parent.
+
+- The numbers we give as a function arguments for `os.Mkdir` or `os.WriteFile` indicates the unix filesystem permissions. 
+    - First digit --> permission of the owner.
+    - Second digit --> permission of the group.
+    - Third digit --> permission of others.
+    - **Permissions** : `4 = Read`, `2 = Write`, `1 = Execute`.
+        - 7 indicates read,write,execute permission.
+        - 5 indicates read,execute.
+        - 0 indicates no permission.
+
+---
+
+**Difference between `/proc` and `cgroups.proc`**
+
+- Inside `/proc` each running process will get a directory. 
+    
+    - `/proc/<pid>/status` and `/proc/<pid>/stat` - memory, state, CPU Info etc.
+    - `/proc/<pid>/cgroup` cgroup to which the process is belonging.
+
+- `cgroups.proc` lists all the pids belonging to a cgroup.
+-  Both are different way to look at same underlying data.
+
+---
+
+- Once the control group function is defined, we will call it inside the child function.
+
+```go
+func  child(){
+
+	cg()
+
+	syscall.Sethostname([]byte("container"))
+	syscall.Chroot("/nav/rootfs")
+	.
+    .
+
+	cmd := exec.Command(os.Args[2], os.Args[3:]...)
+	cmd.Stdin = os.Stdin
+	.
+    .
+
+
+    cmd.Run()
+	
+	// umount proc upon exit
+	syscall.Unmount("/proc", 0)
+}
+```
+
+- Upon exit we remove the directory we created inside cgroup.
+
+```go
+func run(){
+
+	cmd := exec.Command("/proc/self/exe", append([]string{"child"},os.Args[2:]...)...)
+	cmd.Stdin = os.Stdin
+    .
+    .
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
+		
+	}
+    .
+    .
 
 
 
+    cmd.Run() 
 
-| Path | Filesystem Type | Purpose |
-|------|----------------|---------|
-| `/proc` | `procfs` | Process information |
-| `/sys` | `sysfs` | Hardware and kernel information |
-| `/dev` | `devtmpfs` | Device files |
-| `/dev/pts` | `devpts` | Pseudo-terminals |
-
-
-
-
-
-
-
-
-
+	//  remove cgroup upon exit
+	syscall.Rmdir("/sys/fs/cgroup/dir-name")
+}
+```
 
 
