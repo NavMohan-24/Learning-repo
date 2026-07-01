@@ -65,17 +65,22 @@ cmd.Run()
 
 ### Flags in GO:
 - `CloneFlags` --> *performs `clone` syscall* : Creates a new child process from scratch.
-    - State-Copy Namesapces (Cloned from parent)
-    
-        - `CLONE_NEWNS` (**Mount**) 
-        - `CLONE_NEWUTS` (**Hostname**)
-    
-    - Reset-to-Empty Namespaces (Fresh slate)
+    - Clone flags tells what namespaces to create for the new process.
+    - When a child process is cloned from the parent, the namespaces are created in two different manner.
 
-        - CLONE_NEWPID (**Process ID**)
-        - CLONE_NEWNT (**network**)
+    - Namespaces like UTS, Mount and TIME are created by copying the data (structure) from the Host. 
+      - CLONE_NEWUTS --> call will make the child process inherit the host and domain name of the host. 
+      - CLONE_NEWNS --> Child process will inherit Mount table (Mount Point list) duration time. After that, it will not propagate.
+      - CLONE_TIME --> The child process created starts with time offset zero with respect to the host.
 
-- Clone flags tells what namespaces to create for the new process.
+    - Other namespaces will start with a fresh slate. 
+        - New PID namespaces makes the child process as PID 1.
+        - New USER namespace starts with no UID/GID mappings (so no UID resolves to an actual root user yet). However, the process that created the namespace is granted full capabilities within that namespace, which it typically uses to write the initial UID/GID mapping (often mapping itself to UID 0 inside).
+
+
+
+- UnshareFlags → uses the `unshare()` syscall → takes the current process and moves it out of its current namespaces into new ones, without creating a new process to do so.
+
 
 ### Configuring Child Process/Container
 
